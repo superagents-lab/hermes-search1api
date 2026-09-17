@@ -1,0 +1,21 @@
+name: search1api
+version: "0.1.0"
+description: "Search the live web, read pages, find news, discover site links, and explore trending topics via Search1API"
+author: superagents-lab
+requires_env: []
+optional_env:
+  - SEARCH1API_KEY
+  - SEARCH1API_API_KEY
+provides_tools:
+  - search1api_search
+  - search1api_news
+  - search1api_crawl
+  - search1api_sitemap
+  - search1api_trending
+onboarding:
+  note: "Set SEARCH1API_KEY in ~/.hermes/.env or your shell environment. Get a key at https://s1.dev — the free plan includes 100 credits. SEARCH1API_API_KEY is also accepted."
+  recommended_env:
+    - name: SEARCH1API_KEY
+      description: "Search1API — web search, news, page crawl, sitemap, and trending (100 free credits)"
+      url: "https://s1.dev"
+      secret: true
