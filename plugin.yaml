@@ -1,5 +1,5 @@
 name: search1api
-version: "0.1.0"
+version: "0.2.0"
 description: "Search the live web, read pages, find news, discover site links, and explore trending topics via Search1API"
 author: superagents-lab
 requires_env: []
@@ -9,6 +9,7 @@ optional_env:
 provides_tools:
   - search1api_search
   - search1api_news
+  - search1api_ask
   - search1api_crawl
   - search1api_sitemap
   - search1api_trending

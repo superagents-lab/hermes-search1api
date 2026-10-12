@@ -8,8 +8,10 @@ TimeRange = Literal["day", "week", "month", "year"]
 SearchEngine = Literal[
     "google",
     "bing",
+    "bingcn",
     "duckduckgo",
     "yahoo",
+    "yandex",
     "youtube",
     "x",
     "reddit",
@@ -19,7 +21,7 @@ SearchEngine = Literal[
     "bilibili",
     "imdb",
     "wikipedia",
-    "sogou",
+    "grokipedia",
     "baidu",
     "360",
     "quark",
@@ -37,6 +39,7 @@ class SearchRequestRequired(TypedDict):
 class SearchRequest(SearchRequestRequired, total=False):
     search_service: SearchEngine
     max_results: int
+    page: int
     crawl_results: int
     image: bool
     include_sites: List[str]
@@ -51,8 +54,19 @@ class SearchResultRequired(TypedDict):
     snippet: str
 
 
+class SearchResultMetadata(TypedDict, total=False):
+    kind: Literal["repo", "issue", "pr", "discussion"]
+    stars: int
+    language: str
+    num_comments: int
+    points: int
+    story_url: str
+
+
 class SearchResult(SearchResultRequired, total=False):
     content: str
+    published_date: str
+    metadata: SearchResultMetadata
 
 
 class SearchResponseRequired(TypedDict):
@@ -80,6 +94,49 @@ class NewsRequest(NewsRequestRequired, total=False):
     exclude_sites: List[str]
     language: str
     time_range: TimeRange
+
+
+class AskIntent(TypedDict):
+    search_query: str
+    sources: List[str]
+    time_range: Optional[TimeRange]
+
+
+class AskResultRequired(TypedDict):
+    title: str
+    link: str
+    snippet: str
+    source: str
+    relevance: float
+
+
+class AskResult(AskResultRequired, total=False):
+    published_date: str
+
+
+class AskError(TypedDict):
+    source: str
+    message: str
+
+
+class AskResponse(TypedDict):
+    query: str
+    intent: AskIntent
+    results: List[AskResult]
+    errors: List[AskError]
+
+
+FeedbackCategory = Literal["bug", "feature_request", "docs", "other"]
+
+
+class FeedbackAgent(TypedDict, total=False):
+    name: str
+    model: str
+
+
+class FeedbackResponse(TypedDict):
+    id: str
+    status: Literal["new"]
 
 
 class BatchItemRequired(TypedDict):

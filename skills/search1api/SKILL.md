@@ -1,13 +1,14 @@
 ---
 name: search1api
-description: When and how to use the Search1API tools (search, news, crawl, sitemap, trending) for live web data.
+description: When and how to use the Search1API tools (search, news, ask, crawl, sitemap, trending) for live web data.
 ---
 
 # Search1API
 
-Five tools backed by the Search1API API (https://s1.dev). All require
+Six tools backed by the Search1API API (https://s1.dev). All require
 `SEARCH1API_KEY` (or `SEARCH1API_API_KEY`) in the environment; each call costs
-1 credit.
+a base of 1 credit for search/news/crawl/sitemap/trending; `ask` costs 5 credits.
+Successful result crawls cost extra credits.
 
 ## Tool selection
 
@@ -18,6 +19,7 @@ Five tools backed by the Search1API API (https://s1.dev). All require
 - `search1api_news` — current events, announcements, "latest" questions.
   Same parameters as search; `time_range` is especially useful here
   (`day`/`week`/`month`/`year`).
+- `search1api_ask` — natural-language requests with automatic engine and time-window selection and relevance ranking. Pass only `query`; costs 5 credits.
 - `search1api_crawl` — read one public URL as clean Markdown. Use this after
   `search1api_search` when a result's snippet is promising but too short, or
   when the user hands you a URL to read.
@@ -44,3 +46,13 @@ Tool responses are JSON. On failure they contain
   `SEARCH1API_KEY`.
 - 402 → credits exhausted; point the user to https://s1.dev to top up.
 - 429 → rate limited; retry after a short wait.
+
+## Current engine and result contract
+
+Search includes `bingcn`, `yandex`, and `grokipedia`; do not use `sogou`.
+Search/news support `week`. Use `page` for native search pagination.
+GitHub and Hacker News attributes are inside optional result `metadata`
+(`kind`, `stars`, `language`, `num_comments`, `points`, `story_url`).
+`published_date` stays optional at the result top level. Ask results additionally
+include `source` and `relevance`; cite the returned links. Credit Grokipedia
+results as "Powered by xAI".
