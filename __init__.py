@@ -135,6 +135,10 @@ def register(ctx) -> None:
                     "enum": _SEARCH_ENGINES,
                     "description": "Search backend to use.",
                 },
+                "page": {
+                    "type": "integer", "minimum": 1, "maximum": 100,
+                    "description": "Optional native results page.",
+                },
                 "crawl_results": {
                     "type": "integer",
                     "minimum": 0,
@@ -167,7 +171,7 @@ def register(ctx) -> None:
         query = str(params.get("query") or "").strip()
         if not query:
             return json.dumps({"success": False, "error": {"message": "query is required"}})
-        return _call(lambda c: c.search(query, **_search_kwargs(params)))
+        return _call(lambda c: c.search(query, page=params.get("page"), **_search_kwargs(params)))
 
     ctx.register_tool(
         name="search1api_search",
@@ -241,6 +245,33 @@ def register(ctx) -> None:
         requires_env=[],
         description="Search current news via Search1API",
         emoji="📰",
+    )
+
+    ask_schema = {
+        "name": "search1api_ask",
+        "description": (
+            "Describe what to find in natural language. Search1API chooses engines "
+            "and a time window and returns results ranked by relevance. Costs 5 credits."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"query": {"type": "string", "minLength": 1, "maxLength": 500}},
+            "required": ["query"],
+        },
+    }
+
+    def ask_handler(params, **kwargs) -> str:
+        del kwargs
+        params = params if isinstance(params, dict) else {}
+        query = str(params.get("query") or "").strip()
+        if not query:
+            return json.dumps({"success": False, "error": {"message": "query is required"}})
+        return _call(lambda c: c.ask(query))
+
+    ctx.register_tool(
+        name="search1api_ask", toolset=_TOOLSET_NAME, schema=ask_schema,
+        handler=ask_handler, check_fn=_has_api_key, requires_env=[],
+        description="Agentic search via Search1API (5 credits)",
     )
 
     crawl_schema = {
@@ -363,5 +394,5 @@ def register(ctx) -> None:
         ctx.register_skill(
             name="search1api",
             path=_PLUGIN_DIR / "skills" / "search1api" / "SKILL.md",
-            description="When and how to use the Search1API search, news, crawl, sitemap, and trending tools.",
+            description="When and how to use the Search1API search, news, ask, crawl, sitemap, and trending tools.",
         )

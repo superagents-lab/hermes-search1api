@@ -22,6 +22,7 @@ dependency.
 |---|---|
 | `search1api_search` | Live web search — freshness (`time_range`), domain filters (`include_sites`/`exclude_sites`), engine choice (`search_service`), optional full-page retrieval (`crawl_results`) |
 | `search1api_news` | News search with the same filters |
+| `search1api_ask` | Natural-language search with automatic routing and relevance ranking (5 credits) |
 | `search1api_crawl` | Read one public URL as clean Markdown |
 | `search1api_sitemap` | Enumerate a site's URLs |
 | `search1api_trending` | Trending GitHub repos / Hacker News stories |
@@ -48,3 +49,26 @@ load it with `skill_view("plugin:search1api")`.
 ## License
 
 MIT
+
+
+## Current API capabilities
+
+Search supports `bingcn`, `yandex`, and `grokipedia`; `sogou` is removed.
+Search and news support `day`, `week`, `month`, and `year`. Search accepts
+`page` on engines with native pagination.
+
+The default Ask tool accepts only a natural-language `query`. The server
+chooses engines and a time window and returns `query`, `intent`, ranked
+`results`, and `errors`. Ask results include `source` and `relevance`; this
+endpoint returns search results rather than a generated answer. Each call
+costs **5 credits**. Use ordinary search when the engine and keywords are known.
+
+Engine-specific search/news attributes stay inside optional per-result
+`metadata`: GitHub uses `kind`, `stars`, `language`, and `num_comments`;
+Hacker News news results use `story_url`, `points`, and `num_comments`.
+`published_date` stays optional at the result top level. Zero counts are
+preserved and unavailable fields are omitted. Credit Grokipedia results as
+"Powered by xAI".
+
+`search1api_ask` is registered by default. The vendored SDK is the exact
+published Python SDK 0.4.0; no extra pip installation is needed.

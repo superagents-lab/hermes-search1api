@@ -69,10 +69,10 @@ def _json_response(payload, status=200):
     return httpx.Response(status, json=payload)
 
 
-def test_registers_five_tools_and_skill(ctx):
+def test_registers_six_tools_and_skill(ctx):
     assert set(ctx.tools) == {
         "search1api_search", "search1api_news", "search1api_crawl",
-        "search1api_sitemap", "search1api_trending",
+        "search1api_sitemap", "search1api_trending", "search1api_ask",
     }
     assert all(t["toolset"] == "search1api" for t in ctx.tools.values())
     assert ctx.skills and ctx.skills[0]["name"] == "search1api"
@@ -104,8 +104,9 @@ def test_search_maps_params(ctx, api):
 
 def test_news_hits_news_endpoint(ctx, api):
     calls, responses = api
-    responses.append(_json_response({"results": []}))
-    ctx.tools["search1api_news"]["handler"]({"query": "nvidia"})
+    payload = {"results": [{"title": "News", "link": "https://example.com", "metadata": {"points": 0, "num_comments": 0}}]}
+    responses.append(_json_response(payload))
+    assert json.loads(ctx.tools["search1api_news"]["handler"]({"query": "nvidia"})) == payload
     assert calls[0]["path"] == "/news"
 
 
@@ -145,3 +146,30 @@ def test_bad_params_fail_fast(ctx, api):
     assert json.loads(ctx.tools["search1api_crawl"]["handler"]({}))["success"] is False
     assert json.loads(ctx.tools["search1api_trending"]["handler"]({"service": "x"}))["success"] is False
     assert calls == []
+
+
+@pytest.mark.parametrize("engine", ["bingcn", "yandex", "grokipedia"])
+def test_current_engines_pagination_and_metadata(ctx, api, engine):
+    calls, responses = api
+    payload = {"results": [{"title": "t", "link": "https://example.com", "snippet": "s", "published_date": "2026-10-12", "metadata": {"stars": 0}}]}
+    responses.append(_json_response(payload))
+    output = json.loads(ctx.tools["search1api_search"]["handler"]({"query": "q", "search_service": engine, "time_range": "week", "page": 2}))
+    assert output == payload
+    assert calls[0]["body"]["search_service"] == engine
+    assert calls[0]["body"]["page"] == 2
+    assert calls[0]["body"]["time_range"] == "week"
+    assert engine in ctx.tools["search1api_search"]["schema"]["parameters"]["properties"]["search_service"]["enum"]
+    assert "sogou" not in plugin._SEARCH_ENGINES
+
+
+def test_ask_query_only_and_response(ctx, api):
+    calls, responses = api
+    payload = {"query": "Bun this week", "intent": {"search_query": "Bun", "sources": ["github"], "time_range": "week"}, "results": [{"title": "Bun", "link": "https://github.com/oven-sh/bun", "snippet": "Runtime", "source": "github", "relevance": 0.9}], "errors": []}
+    responses.append(_json_response(payload))
+    output = json.loads(ctx.tools["search1api_ask"]["handler"]({"query": " Bun this week ", "max_results": 2, "search_service": "google"}))
+    assert output == payload
+    assert calls[0]["path"] == "/ask"
+    assert calls[0]["body"] == {"query": "Bun this week"}
+    assert set(ctx.tools["search1api_ask"]["schema"]["parameters"]["properties"]) == {"query"}
+    assert json.loads(ctx.tools["search1api_ask"]["handler"]({"query": " "}))["success"] is False
+    assert len(calls) == 1

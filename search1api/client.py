@@ -21,6 +21,7 @@ from .errors import (
     api_status_error,
 )
 from .types import (
+    AskResponse,
     BatchResponse,
     CrawlRequest,
     CrawlResponse,
@@ -28,6 +29,9 @@ from .types import (
     DeepcrawlAcceptedResponse,
     DeepcrawlStatusResponse,
     ExtractResponse,
+    FeedbackAgent,
+    FeedbackCategory,
+    FeedbackResponse,
     HealthResponse,
     NewsEngine,
     NewsRequest,
@@ -47,6 +51,9 @@ from .types import (
 
 DEFAULT_BASE_URL = "https://api.search1api.com"
 DEFAULT_TIMEOUT = 30.0
+# The gateway gives Ask up to 35 seconds, so the default 30 seconds would abort
+# requests the API would still answer.
+DEFAULT_ASK_TIMEOUT = 45.0
 DEFAULT_MAX_RETRIES = 2
 DEFAULT_RETRY_DELAY = 0.5
 DEFAULT_DEEPCRAWL_POLL_INTERVAL = 2.0
@@ -62,6 +69,7 @@ def _search_payload(
     *,
     search_service: Optional[str] = None,
     max_results: Optional[int] = None,
+    page: Optional[int] = None,
     crawl_results: Optional[int] = None,
     image: Optional[bool] = None,
     include_sites: Optional[List[str]] = None,
@@ -74,12 +82,32 @@ def _search_payload(
             "query": query,
             "search_service": search_service,
             "max_results": max_results,
+            "page": page,
             "crawl_results": crawl_results,
             "image": image,
             "include_sites": include_sites,
             "exclude_sites": exclude_sites,
             "language": language,
             "time_range": time_range,
+        }
+    )
+
+
+def _feedback_payload(
+    message: str,
+    *,
+    intent: Optional[str] = None,
+    category: Optional[FeedbackCategory] = None,
+    request_id: Optional[str] = None,
+    agent: Optional[FeedbackAgent] = None,
+) -> Dict[str, Any]:
+    return _compact(
+        {
+            "message": message,
+            "intent": intent,
+            "category": category,
+            "request_id": request_id,
+            "agent": _compact(cast(Mapping[str, Any], agent)) if agent else None,
         }
     )
 
@@ -179,7 +207,7 @@ class _ClientConfig:
         return {
             "Accept": accept,
             "Authorization": f"Bearer {self.api_key}",
-            "X-Search1API-Client": "python/0.2.0",
+            "X-Search1API-Client": "python/0.3.0",
             **self.headers,
         }
 
@@ -229,6 +257,7 @@ class Search1API(_ClientConfig):
         *,
         search_service: Optional[SearchEngine] = None,
         max_results: Optional[int] = None,
+        page: Optional[int] = None,
         crawl_results: Optional[int] = None,
         image: Optional[bool] = None,
         include_sites: Optional[List[str]] = None,
@@ -240,6 +269,7 @@ class Search1API(_ClientConfig):
             query,
             search_service=search_service,
             max_results=max_results,
+            page=page,
             crawl_results=crawl_results,
             image=image,
             include_sites=include_sites,
@@ -280,6 +310,16 @@ class Search1API(_ClientConfig):
 
     def news_batch(self, requests: List[NewsRequest]) -> BatchResponse:
         return cast(BatchResponse, self._request_json("POST", "/news", json=requests))
+
+    def ask(self, query: str, *, timeout: float = DEFAULT_ASK_TIMEOUT) -> AskResponse:
+        """Agentic search: Search1API picks the engines and time window.
+
+        A completed request costs 5 credits.
+        """
+        return cast(
+            AskResponse,
+            self._request_json("POST", "/ask", json={"query": query}, timeout=timeout),
+        )
 
     def crawl(
         self, url: str, *, enable_fallback: Optional[bool] = None
@@ -442,6 +482,32 @@ class Search1API(_ClientConfig):
     def health(self) -> HealthResponse:
         return cast(HealthResponse, self._request_json("GET", "/health"))
 
+    def feedback(
+        self,
+        message: str,
+        *,
+        intent: Optional[str] = None,
+        category: Optional[FeedbackCategory] = None,
+        request_id: Optional[str] = None,
+        agent: Optional[FeedbackAgent] = None,
+    ) -> FeedbackResponse:
+        """Report a Search1API problem or missing capability. Free.
+
+        Never retried automatically: the API has no idempotency key, so a retry
+        after a lost response would file a duplicate report.
+        """
+        payload = _feedback_payload(
+            message,
+            intent=intent,
+            category=category,
+            request_id=request_id,
+            agent=agent,
+        )
+        return cast(
+            FeedbackResponse,
+            self._request_json("POST", "/feedback", json=payload, retryable=False),
+        )
+
     def _request_json(self, method: str, path: str, **kwargs: Any) -> Any:
         response = self._request(method, path, **kwargs)
         try:
@@ -454,6 +520,7 @@ class Search1API(_ClientConfig):
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         retryable = bool(kwargs.pop("retryable", True))
         accept = str(kwargs.pop("accept", "application/json"))
+        timeout = float(kwargs.pop("timeout", self.timeout))
         max_retries = self.max_retries if retryable else 0
         for attempt in range(max_retries + 1):
             try:
@@ -461,7 +528,7 @@ class Search1API(_ClientConfig):
                     method,
                     f"{self.base_url}{path}",
                     headers=self._request_headers(accept),
-                    timeout=self.timeout,
+                    timeout=timeout,
                     **kwargs,
                 )
             except httpx.TimeoutException as exc:
@@ -469,7 +536,7 @@ class Search1API(_ClientConfig):
                     time.sleep(self._retry_sleep(attempt))
                     continue
                 raise APITimeoutError(
-                    f"Search1API request timed out after {self.timeout:g}s"
+                    f"Search1API request timed out after {timeout:g}s"
                 ) from exc
             except httpx.RequestError as exc:
                 if attempt < max_retries:
@@ -530,6 +597,7 @@ class AsyncSearch1API(_ClientConfig):
         *,
         search_service: Optional[SearchEngine] = None,
         max_results: Optional[int] = None,
+        page: Optional[int] = None,
         crawl_results: Optional[int] = None,
         image: Optional[bool] = None,
         include_sites: Optional[List[str]] = None,
@@ -546,6 +614,7 @@ class AsyncSearch1API(_ClientConfig):
                     query,
                     search_service=search_service,
                     max_results=max_results,
+                    page=page,
                     crawl_results=crawl_results,
                     image=image,
                     include_sites=include_sites,
@@ -598,6 +667,20 @@ class AsyncSearch1API(_ClientConfig):
         return cast(
             BatchResponse,
             await self._request_json("POST", "/news", json=requests),
+        )
+
+    async def ask(
+        self, query: str, *, timeout: float = DEFAULT_ASK_TIMEOUT
+    ) -> AskResponse:
+        """Agentic search: Search1API picks the engines and time window.
+
+        A completed request costs 5 credits.
+        """
+        return cast(
+            AskResponse,
+            await self._request_json(
+                "POST", "/ask", json={"query": query}, timeout=timeout
+            ),
         )
 
     async def crawl(
@@ -775,6 +858,34 @@ class AsyncSearch1API(_ClientConfig):
     async def health(self) -> HealthResponse:
         return cast(HealthResponse, await self._request_json("GET", "/health"))
 
+    async def feedback(
+        self,
+        message: str,
+        *,
+        intent: Optional[str] = None,
+        category: Optional[FeedbackCategory] = None,
+        request_id: Optional[str] = None,
+        agent: Optional[FeedbackAgent] = None,
+    ) -> FeedbackResponse:
+        """Report a Search1API problem or missing capability. Free.
+
+        Never retried automatically: the API has no idempotency key, so a retry
+        after a lost response would file a duplicate report.
+        """
+        payload = _feedback_payload(
+            message,
+            intent=intent,
+            category=category,
+            request_id=request_id,
+            agent=agent,
+        )
+        return cast(
+            FeedbackResponse,
+            await self._request_json(
+                "POST", "/feedback", json=payload, retryable=False
+            ),
+        )
+
     async def _request_json(self, method: str, path: str, **kwargs: Any) -> Any:
         response = await self._request(method, path, **kwargs)
         try:
@@ -787,6 +898,7 @@ class AsyncSearch1API(_ClientConfig):
     async def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         retryable = bool(kwargs.pop("retryable", True))
         accept = str(kwargs.pop("accept", "application/json"))
+        timeout = float(kwargs.pop("timeout", self.timeout))
         max_retries = self.max_retries if retryable else 0
         for attempt in range(max_retries + 1):
             try:
@@ -794,7 +906,7 @@ class AsyncSearch1API(_ClientConfig):
                     method,
                     f"{self.base_url}{path}",
                     headers=self._request_headers(accept),
-                    timeout=self.timeout,
+                    timeout=timeout,
                     **kwargs,
                 )
             except httpx.TimeoutException as exc:
@@ -802,7 +914,7 @@ class AsyncSearch1API(_ClientConfig):
                     await asyncio.sleep(self._retry_sleep(attempt))
                     continue
                 raise APITimeoutError(
-                    f"Search1API request timed out after {self.timeout:g}s"
+                    f"Search1API request timed out after {timeout:g}s"
                 ) from exc
             except httpx.RequestError as exc:
                 if attempt < max_retries:
