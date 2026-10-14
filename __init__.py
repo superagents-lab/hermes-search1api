@@ -9,7 +9,7 @@ dependency, ``httpx``, is a Hermes core dependency and always present.
 """
 from __future__ import annotations
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 import json
 import os
@@ -50,9 +50,23 @@ _TIME_RANGES = sorted(get_args(TimeRange))
 _TRENDING_SERVICES = ["github", "hackernews"]
 
 
+def _read_secret(name: str) -> str:
+    """Read a credential through Hermes's profile-scoped secret store.
+
+    ``get_secret`` returns the active profile's value under multiplexing and
+    falls back to the process environment otherwise; Hermes builds without
+    ``agent.secret_scope`` read the environment directly.
+    """
+    try:
+        from agent.secret_scope import get_secret
+    except ImportError:
+        return os.environ.get(name, "")
+    return get_secret(name) or ""
+
+
 def _resolve_api_key() -> Optional[str]:
     for var in _API_KEY_ENV_VARS:
-        value = os.environ.get(var, "").strip()
+        value = _read_secret(var).strip()
         if value:
             return value
     return None
