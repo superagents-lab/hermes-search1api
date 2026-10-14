@@ -173,3 +173,19 @@ def test_ask_query_only_and_response(ctx, api):
     assert set(ctx.tools["search1api_ask"]["schema"]["parameters"]["properties"]) == {"query"}
     assert json.loads(ctx.tools["search1api_ask"]["handler"]({"query": " "}))["success"] is False
     assert len(calls) == 1
+
+
+def test_api_key_read_through_hermes_secret_scope(ctx, monkeypatch):
+    """The key comes from the active profile's secret scope, not a bare env read."""
+    import types
+
+    monkeypatch.delenv("SEARCH1API_KEY", raising=False)
+    monkeypatch.delenv("SEARCH1API_API_KEY", raising=False)
+    scope = types.ModuleType("agent.secret_scope")
+    scope.get_secret = lambda name, default=None: {"SEARCH1API_API_KEY": " scoped "}.get(name, default)
+    agent_pkg = types.ModuleType("agent")
+    agent_pkg.secret_scope = scope
+    monkeypatch.setitem(sys.modules, "agent", agent_pkg)
+    monkeypatch.setitem(sys.modules, "agent.secret_scope", scope)
+    assert plugin._resolve_api_key() == "scoped"
+    assert ctx.tools["search1api_search"]["check_fn"]() is True
